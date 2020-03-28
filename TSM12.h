@@ -55,12 +55,12 @@ public:
   TSM12(const uint8_t i2c_en_pin, const uint8_t addr, TwoWire &i2c);
   void begin();
   void begin(uint16_t channels_mask);
-  uint8_t setAllSensitivity(E_TSM12_SensitivityM_t m, E_TSM12_SensitivityHL_t hl);
   uint8_t setChannelSensitivity(uint8_t channel, E_TSM12_SensitivityM_t m, E_TSM12_SensitivityHL_t hl);
+  uint8_t setAllSensitivity(E_TSM12_SensitivityM_t m, E_TSM12_SensitivityHL_t hl);
   uint8_t resetReference(uint16_t channels_mask);
   uint8_t holdChannel(uint16_t channels_mask);
   uint8_t holdCalibration(uint16_t channels_mask);
-  uint8_t getAllChannelOutputs(E_TSM12_Output_t *poutputs[TSM12_CHANNEL_COUNT_MAX]);
+  uint8_t getAllChannelOutputs(uint8_t *pdata, size_t datalen);
 
 private:
   uint8_t _i2c_en_pin;
@@ -69,7 +69,7 @@ private:
 
   void enableCommunication();
   void disableCommunication();
-  uint8_t read8(uint8_t addr);
+  uint8_t read8(uint8_t addr, uint8_t *pdata);
   uint8_t write8(uint8_t addr, uint8_t data);
   uint8_t write16(uint8_t addr, uint16_t data);
 };

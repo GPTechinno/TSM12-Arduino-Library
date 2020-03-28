@@ -7,11 +7,11 @@
 
 // REGISTER ADDRESSES
 #define TSM12_SENSITIVITY 0x02 /**< First Sensitivity Control Register */
-#define TSM12_CTRL_1      0x08 /**< General Control Register1 */
-#define TSM12_CTRL_2      0x09 /**<  */
-#define TSM12_REF_RST     0x0A /**<  */
-#define TSM12_CH_HOLD     0x0C /**<  */
-#define TSM12_CAL_HOLD    0x0E /**<  */
+#define TSM12_CTRL_1      0x08 /**< General Control Register 1 */
+#define TSM12_CTRL_2      0x09 /**< General Control Register 2 */
+#define TSM12_REF_RST     0x0A /**< First Channel Reference Reset Control Register */
+#define TSM12_CH_HOLD     0x0C /**< First Channel Sensing Control Register */
+#define TSM12_CAL_HOLD    0x0E /**< First Channel Calibration Control Register */
 #define TSM12_OUTPUT      0x10 /**< First Output Register */
 
 // TSM12_SENSITIVITY bits
@@ -86,7 +86,12 @@ void TSM12::begin(uint16_t channels_mask) {
   delay(75);
   write8(TSM12_CTRL_2, TSM12_CTRL2_SRST_ENA | TSM12_CTRL2_SLEEP_ENA | TSM12_CTRL2_INIT);
   delay(10);
-  setAllSensitivity(TSM12_SENS_M_070, TSM12_SENS_HL_20);
+  // setAllSensitivity(TSM12_SENS_M_070, TSM12_SENS_HL_20);
+  uint8_t sens = (TSM12_SENS_M_070 << TSM12_SENSITIVITY_OFFSET_M) | (TSM12_SENS_HL_20 << TSM12_SENSITIVITY_OFFSET_HL);
+  sens |= (sens << TSM12_SENSITIVITY_OFFSET_C);
+  for (uint8_t i = 0U; i < (TSM12_CHANNEL_COUNT_MAX / 2U); i++) {
+    write8(TSM12_SENSITIVITY + i, sens);
+  }
   write8(TSM12_CTRL_1, TSM12_CTRL1_MS_AUTO | TSM12_CTRL1_FTC_37 | TSM12_CTRL1_ILC_H | 0x01U);
   write16(TSM12_REF_RST, channels_mask);
   write16(TSM12_CH_HOLD, channels_mask);
@@ -96,37 +101,14 @@ void TSM12::begin(uint16_t channels_mask) {
 }
 
 /*!
- *  @brief  Set Sensitivity for all channels
- *  @param  m Middle Sensitivity
- *  @param  hl High Low Sensitivity
- *  @return status
- */
-uint8_t setAllSensitivity(E_TSM12_SensitivityM_t m, E_TSM12_SensitivityHL_t hl) {
-  uint8_t ret = TSM12_STATUS_OK;
-
-  // Check Arguments
-  if ((m >= TSM12_SENS_M_MAX) &&
-      (hl >= TSM12_SENS_HL_MAX)
-      ) {
-    return TSM12_STATUS_ERR_INVALID;
-  }
-
-  for (uint8_t i = 0U; i < TSM12_CHANNEL_COUNT_MAX; i++)
-  {
-    ret |= setChannelSensitivity(i, m, hl);
-  }
-
-  return ret;
-}
-
-/*!
  *  @brief  Set Sensitivity for a specific channel
  *  @param  channel Selected Channel
  *  @param  m Middle Sensitivity
  *  @param  hl High Low Sensitivity
  *  @return status
  */
-uint8_t setChannelSensitivity(uint8_t channel, E_TSM12_SensitivityM_t m, E_TSM12_SensitivityHL_t hl) {
+uint8_t TSM12::setChannelSensitivity(uint8_t channel, E_TSM12_SensitivityM_t m, E_TSM12_SensitivityHL_t hl) {
+  uint8_t ret = TSM12_STATUS_OK;
 
   // Check Arguments
   if ((m >= TSM12_SENS_M_MAX) &&
@@ -141,7 +123,33 @@ uint8_t setChannelSensitivity(uint8_t channel, E_TSM12_SensitivityM_t m, E_TSM12
     sens = sens << TSM12_SENSITIVITY_OFFSET_C;
   }
 
-  return write8(TSM12_SENSITIVITY + (uint8_t)(channel / 2U), sens);
+  enableCommunication();
+  ret = write8(TSM12_SENSITIVITY + (uint8_t)(channel / 2U), sens);
+  disableCommunication();
+  return ret;
+}
+
+/*!
+ *  @brief  Set Sensitivity for all channels
+ *  @param  m Middle Sensitivity
+ *  @param  hl High Low Sensitivity
+ *  @return status
+ */
+uint8_t TSM12::setAllSensitivity(E_TSM12_SensitivityM_t m, E_TSM12_SensitivityHL_t hl) {
+  uint8_t ret = TSM12_STATUS_OK;
+
+  // Check Arguments
+  if ((m >= TSM12_SENS_M_MAX) &&
+      (hl >= TSM12_SENS_HL_MAX)
+      ) {
+    return TSM12_STATUS_ERR_INVALID;
+  }
+
+  for (uint8_t i = 0U; i < TSM12_CHANNEL_COUNT_MAX; i++) {
+    ret |= setChannelSensitivity(i, m, hl);
+  }
+
+  return ret;
 }
 
 /*!
@@ -152,7 +160,7 @@ uint8_t setChannelSensitivity(uint8_t channel, E_TSM12_SensitivityM_t m, E_TSM12
 uint8_t TSM12::resetReference(uint16_t channels_mask) {
   uint8_t ret = TSM12_STATUS_OK;
 
-  channels &= 0x0FFFU; // TSM12 has only 12 channels
+  channels_mask &= 0x0FFFU; // TSM12 has only 12 channels
 
   enableCommunication();
   ret = write16(TSM12_REF_RST, channels_mask);
@@ -168,7 +176,7 @@ uint8_t TSM12::resetReference(uint16_t channels_mask) {
 uint8_t TSM12::holdChannel(uint16_t channels_mask) {
   uint8_t ret = TSM12_STATUS_OK;
 
-  channels &= 0x0FFFU; // TSM12 has only 12 channels
+  channels_mask &= 0x0FFFU; // TSM12 has only 12 channels
 
   enableCommunication();
   ret = write16(TSM12_CH_HOLD, channels_mask);
@@ -184,7 +192,7 @@ uint8_t TSM12::holdChannel(uint16_t channels_mask) {
 uint8_t TSM12::holdCalibration(uint16_t channels_mask) {
   uint8_t ret = TSM12_STATUS_OK;
 
-  channels &= 0x0FFFU; // TSM12 has only 12 channels
+  channels_mask &= 0x0FFFU; // TSM12 has only 12 channels
 
   enableCommunication();
   ret = write16(TSM12_CAL_HOLD, channels_mask);
@@ -197,20 +205,22 @@ uint8_t TSM12::holdCalibration(uint16_t channels_mask) {
  *  @param  poutputs Array of all Channels Outputs, will be filled with actual outputs
  *  @return status
  */
-uint8_t TSM12::getAllChannelOutputs(E_TSM12_Output_t *poutputs[TSM12_CHANNEL_COUNT_MAX]) {
+uint8_t TSM12::getAllChannelOutputs(uint8_t *pdata, size_t datalen) {
   uint8_t ret = TSM12_STATUS_OK;
-  uint8_t *pouts = (uint8_t*)poutputs;
 
+  if (datalen != 3U) {
+    return TSM12_STATUS_ERR_INVALID;
+  }
   enableCommunication();
   for (uint8_t i = 0U; i < 3U; i++)
   {
-    ret |= read8(TSM12_OUTPUT + i, &outs[i]);
+    ret |= read8(TSM12_OUTPUT + i, &pdata[i]);
   }
   disableCommunication();
   return ret;
 }
 
-/******************* Low level I2C interface */
+/******************* Low level interface */
 void TSM12::enableCommunication() {
   digitalWrite(_i2c_en_pin, LOW);
 }
